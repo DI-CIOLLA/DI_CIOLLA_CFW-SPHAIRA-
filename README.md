@@ -75,7 +75,7 @@ Once devkitPro and all dependencies are installed, you can now build sphaira.
 git clone https://github.com/DI-CIOLLA/DI_CIOLLA_CFW-SPHAIRA-.git
 ```
 ```sh
-cd sphaira
+cd DI_CIOLLA_CFW-SPHAIRA-
 ```
 ```sh
 cmake --preset Release
