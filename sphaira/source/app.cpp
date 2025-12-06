@@ -2018,7 +2018,8 @@ void App::DisplayMenuOptions(bool left_side) {
             // add some default entries, will use a config file soon so users can set their own.
             ui::PopupList::Items items;
             items.emplace_back("https://google.com");
-            items.emplace_back("https://github.com/DI-CIOLLA/sphaira");
+            items.emplace_back("https://www.youtube.com/");
+            items.emplace_back("https://github.com/DI-CIOLLA/DI_CIOLLA_CFW-SPHAIRA-");
             items.emplace_back("Enter custom URL"_i18n);
 
             App::Push<ui::PopupList>(
