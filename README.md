@@ -4,6 +4,7 @@ A homebrew menu for the Nintendo Switch.
 
 ## Showcase
 
+![Img](assets/icon.jpg)
 |                          |                          |
 :-------------------------:|:-------------------------:
 ![Img](assets/screenshots/homebrew.jpg) | ![Img](assets/screenshots/games.jpg)
