@@ -6,7 +6,7 @@ A homebrew menu for the Nintendo Switch.
 
 |                          |                          |
 :-------------------------:|:-------------------------:
-![Img](assets/screenshots/homebrew.jpg) | ![Img](assets/screenshots/GAMES.jpg)
+![Img](assets/screenshots/homebrew.jpg) | ![Img](assets/screenshots/games.jpg)
 ![Img](assets/screenshots/appstore.jpg) | ![Img](assets/screenshots/appstore_page.jpg)
 ![Img](assets/screenshots/file_browser.jpg) | ![Img](assets/screenshots/launch_options.jpg)
 ![Img](assets/screenshots/themezer.jpg) | ![Img](assets/screenshots/web.jpg)
