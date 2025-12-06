@@ -72,7 +72,7 @@ Also you need to have on your environment the packages `git`, `make`, `zip` and 
 Once devkitPro and all dependencies are installed, you can now build sphaira.
 
 ```sh
-git clone https://github.com/DI-CIOLLA/sphaira.git
+git clone https://github.com/DI-CIOLLA/DI_CIOLLA_CFW-SPHAIRA-.git
 ```
 ```sh
 cd sphaira
