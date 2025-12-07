@@ -1,7 +1,7 @@
 #include "location.hpp"
 #include "i18n.hpp"
 #include "log.hpp"
-#include "utils.hpp"
+#include "utils/devoptab.hpp"
 #include "devoptab/devoptab.hpp"
 #include "usbhsfs.hpp"
 
