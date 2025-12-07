@@ -4,14 +4,12 @@
 #include "utils/devoptab.hpp"
 #include "i18n.hpp"
 
-#include <cstring>
-
 #ifdef ENABLE_LIBUSBDVD
-    #include "usbdvd.hpp"
+#include "usbdvd.hpp"
 #endif
 
 #ifdef ENABLE_LIBUSBHSFS
-    #include <usbhsfs.h>
+#include <usbhsfs.h>
 #endif
 
 namespace sphaira::location {
@@ -19,81 +17,75 @@ namespace sphaira::location {
 auto GetStdio(bool write) -> StdioEntries {
     StdioEntries out{};
 
-    const auto add_from_entries = [](StdioEntries& entries, StdioEntries& out, bool write) {
+    // ---------------------------------------------------------
+    // Helper: rename and push normal stdio entries
+    // ---------------------------------------------------------
+    const auto add_from_entries = [&](StdioEntries& entries, StdioEntries& out, bool write) {
         for (auto& e : entries) {
 
-            // --------------------------------------
-            // RENAME DEFAULT DEVICES
-            // --------------------------------------
-            if (e.name == "ums0")
-                e.name = "USB-DEVICE";
+            // Rename titles
+            if (e.name == "ums0")            e.name = "USB-DEVICE";
+            if (e.name == "microSD card")    e.name = "SD-CARD";
+            if (e.name == "games")           e.name = "GAMES";
+            if (e.name == "Album")           e.name = "ALBUM";
 
-            if (e.name == "microSD card")
-                e.name = "SD-CARD";
-
-            if (e.name == "games")
-                e.name = "GAMES";
-
-            if (e.name == "Album")
-                e.name = "ALBUM";
-
-            // --------------------------------------
-
-            if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)) {
+            // Enforce read-write rules
+            if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly))
                 continue;
-            }
 
-            if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly) {
+            // Append "(Read Only)"
+            if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)
                 e.name += " (Read Only)";
-            }
 
             out.emplace_back(e);
         }
     };
 
-    // -------------------------------------------
-    // NORMAL DEVOPTAB MOUNTS
-    // -------------------------------------------
+    // ---------------------------------------------------------
+    // Normal FS devices
+    // ---------------------------------------------------------
     {
         StdioEntries entries;
-        if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
+        if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries)))
             add_from_entries(entries, out, write);
-        }
     }
 
 #ifdef ENABLE_LIBUSBDVD
     if (!write) {
-        StdioEntry entry;
-        if (usbdvd::GetMountPoint(entry)) {
-            out.emplace_back(entry);
-        }
+        StdioEntry dvd;
+        if (usbdvd::GetMountPoint(dvd))
+            out.emplace_back(dvd);
     }
 #endif
 
 #ifdef ENABLE_LIBUSBHSFS
     if (App::GetHddEnable()) {
 
-        static UsbHsFsDevice devices[0x20];
-        const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
+        UsbHsFsDevice devices[0x20];
+        const s32 count = usbHsFsListMountedDevices(devices, 0x20);
 
         for (s32 i = 0; i < count; i++) {
-            const auto& e = devices[i];
+            const auto& d = devices[i];
 
-            if (write && (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)))
+            if (write && (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)))
                 continue;
 
-            // -------------------------------------------
-            // BUILD REAL USB ENTRY (NO FAKE DISPLAY NAME)
-            // -------------------------------------------
+            // -----------------------------------------
+            // Build USB entry — IMPORTANT:
+            // --------------------------------------------------
+            // YOUR location.hpp uses:
+            //   name
+            //   path        ← this is the mount_point
+            //   flags
+            // --------------------------------------------------
+
             StdioEntry usb;
 
-            usb.name = "USB-DEVICE";               // visible name
-
-            usb.mount_point = e.mount_point;       // REAL mount path from USBHSFS
-                                                   // (this fixes "cannot read files")
-
+            usb.name = "USB-DEVICE";
+            usb.path = d.mount_point;        // FIXED: correct mount point (required for FS)
             usb.flags = 0;
-            if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)) {
+
+            if (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)) {
                 usb.flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
                 usb.name += " (Read Only)";
             }
@@ -107,17 +99,17 @@ auto GetStdio(bool write) -> StdioEntries {
     }
 #endif
 
-    // -------------------------------------------
-    // SORTING: USB FIRST
-    // -------------------------------------------
+    // ---------------------------------------------------------
+    // SORTING — USB FIRST
+    // ---------------------------------------------------------
     std::sort(out.begin(), out.end(),
         [](const StdioEntry& a, const StdioEntry& b) {
 
             bool a_usb = a.name.rfind("USB-DEVICE", 0) == 0;
             bool b_usb = b.name.rfind("USB-DEVICE", 0) == 0;
 
-            if (a_usb && !b_usb) return true;
-            if (!a_usb && b_usb) return false;
+            if (a_usb != b_usb)
+                return a_usb;  // USB first
 
             return a.name < b.name;
         }
