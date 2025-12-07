@@ -2,7 +2,6 @@
 #include "i18n.hpp"
 #include "log.hpp"
 #include "utils/devoptab.hpp"
-#include "devoptab/devoptab.hpp"
 #include "usbhsfs.hpp"
 
 namespace sphaira::location {
