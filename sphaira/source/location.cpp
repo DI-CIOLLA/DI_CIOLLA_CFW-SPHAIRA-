@@ -8,35 +8,37 @@
 
 #ifdef ENABLE_LIBUSBDVD
     #include "usbdvd.hpp"
-#endif // ENABLE_LIBUSBDVD
+#endif
 
 #ifdef ENABLE_LIBUSBHSFS
     #include <usbhsfs.h>
-#endif // ENABLE_LIBUSBHSFS
+#endif
 
 namespace sphaira::location {
 namespace {
 
 } // namespace
 
+
 auto GetStdio(bool write) -> StdioEntries {
     StdioEntries out{};
 
     const auto add_from_entries = [](StdioEntries& entries, StdioEntries& out, bool write) {
         for (auto& e : entries) {
+
             if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)) {
                 log_write("[STDIO] skipping read only mount: %s\n", e.name.c_str());
                 continue;
             }
 
-            if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly) {
+            if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)
                 e.name += i18n::get(" (Read Only)");
-            }
 
             out.emplace_back(e);
         }
     };
 
+    // devoptab mounts
     {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
@@ -45,34 +47,25 @@ auto GetStdio(bool write) -> StdioEntries {
         }
     }
 
+
 #ifdef ENABLE_LIBUSBDVD
-    // try and load usbdvd entry.
-    // todo: check if more than 1 entry is supported.
-    // todo: only call if usbdvd is init.
     if (!write) {
         StdioEntry entry;
         if (usbdvd::GetMountPoint(entry)) {
             out.emplace_back(entry);
         }
     }
-#endif // ENABLE_LIBUSBDVD
+#endif
+
 
 #ifdef ENABLE_LIBUSBHSFS
-    // bail out early if usbhdd is disabled.
+
     if (!App::GetHddEnable()) {
         log_write("[USBHSFS] not enabled\n");
-        
-    // Custom ordering inserted
-    static const std::vector<std::string> order = { "USB-DEVICE", "SD-CARD", "GAMES", "ALBUM", "USER", "SYSTEM", "SAFE", "PRODINFO" };
-    std::sort(out.begin(), out.end(), [&](auto& a, auto& b){
-        auto ia = std::find(order.begin(), order.end(), a.name);
-        auto ib = std::find(order.begin(), order.end(), b.name);
-        return ia < ib;
-    });
-
-    return out;
+        return out;
     }
 
+    // USB devices
     static UsbHsFsDevice devices[0x20];
     const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
     log_write("[USBHSFS] got connected: %u\n", usbHsFsGetPhysicalDeviceCount());
@@ -87,24 +80,41 @@ auto GetStdio(bool write) -> StdioEntries {
         }
 
         char display_name[0x100];
-        std::snprintf(display_name, sizeof(display_name), "%s (%s - %s - %zu GB)", e.name, LIBUSBHSFS_FS_TYPE_STR(e.fs_type), e.product_name, e.capacity / 1024 / 1024 / 1024);
+        std::snprintf(display_name, sizeof(display_name),
+                      "USB-DEVICE (%s - %s - %zu GB)",
+                      LIBUSBHSFS_FS_TYPE_STR(e.fs_type),
+                      (e.product_name[0] ? e.product_name : "Unknown"),
+                      (size_t)(e.capacity / 1024 / 1024 / 1024));
 
         u32 flags = 0;
-        if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)) {
+        if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly))
             flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
-        }
 
-        out.emplace_back(e.name, display_name, flags);
-        log_write("\t[USBHSFS] %s name: %s serial: %s man: %s\n", e.name, e.product_name, e.serial_number, e.manufacturer);
+        // name verändert → wichtig für Sortierung
+        out.emplace_back("USB-DEVICE", display_name, flags);
+
+        log_write("\t[USBHSFS] USB: %s serial: %s man: %s\n",
+                  e.product_name, e.serial_number, e.manufacturer);
     }
+
 #endif // ENABLE_LIBUSBHSFS
 
-    
-    // Custom ordering inserted
-    static const std::vector<std::string> order = { "USB-DEVICE", "SD-CARD", "GAMES", "ALBUM", "USER", "SYSTEM", "SAFE", "PRODINFO" };
+
+    // Richtige Reihenfolge
+    static const std::vector<std::string> ORDER = {
+        "USB-DEVICE",
+        "SD-CARD",
+        "GAMES",
+        "ALBUM",
+        "USER",
+        "SYSTEM",
+        "SAFE",
+        "PRODINFO"
+    };
+
     std::sort(out.begin(), out.end(), [&](auto& a, auto& b){
-        auto ia = std::find(order.begin(), order.end(), a.name);
-        auto ib = std::find(order.begin(), order.end(), b.name);
+        auto ia = std::find(ORDER.begin(), ORDER.end(), a.name);
+        auto ib = std::find(ORDER.begin(), ORDER.end(), b.name);
         return ia < ib;
     });
 
