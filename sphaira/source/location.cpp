@@ -35,14 +35,14 @@ static int GetPriority(const std::string& name) {
 auto GetStdio(bool write) -> StdioEntries {
     StdioEntries out{};
 
-    const auto add_from_entries = [](StdioEntries& entries, StdioEntries& out, bool write) {
+    const auto add_from_entries = [&](StdioEntries& entries, bool write) {
         for (auto e : entries) {
 
             if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly))
                 continue;
 
             if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)
-                e.display_name += i18n::get(" (Read Only)");
+                e.label += i18n::get(" (Read Only)");
 
             out.emplace_back(e);
         }
@@ -52,7 +52,7 @@ auto GetStdio(bool write) -> StdioEntries {
     {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
-            add_from_entries(entries, out, write);
+            add_from_entries(entries, write);
         }
     }
 
@@ -80,17 +80,16 @@ auto GetStdio(bool write) -> StdioEntries {
         if (write && (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)))
             continue;
 
-        char display_name[256];
-        snprintf(display_name, sizeof(display_name),
+        char label[256];
+        snprintf(label, sizeof(label),
                 "USB-DEVICE (%s - %s - %zu GB)",
                 LIBUSBHSFS_FS_TYPE_STR(d.fs_type),
                 (d.product_name[0] ? d.product_name : "Unknown"),
                 (size_t)(d.capacity / 1024 / 1024 / 1024));
 
         StdioEntry entry;
-
-        entry.name = d.name;                // WICHTIG: ums0 / ums1 → Dateizugriff funktioniert
-        entry.display_name = display_name;  // Sichtbarer Name im Menü
+        entry.name = d.name;   // WICHTIG: ums0 → Dateizugriff funktioniert
+        entry.label = label;   // Was im Menü angezeigt wird
         entry.flags = (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly))
                       ? FsEntryFlag::FsEntryFlag_ReadOnly
                       : 0;
@@ -109,7 +108,7 @@ auto GetStdio(bool write) -> StdioEntries {
         if (pa != pb)
             return pa < pb;
 
-        return a.display_name < b.display_name;
+        return a.label < b.label;
     });
 
     return out;
