@@ -1,6 +1,5 @@
 #include "location.hpp"
 #include "i18n.hpp"
-#include "fonts.hpp"
 #include "log.hpp"
 #include "utils.hpp"
 #include "devoptab/devoptab.hpp"
