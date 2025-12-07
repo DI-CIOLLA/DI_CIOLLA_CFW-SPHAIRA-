@@ -92,7 +92,22 @@ auto GetStdio(bool write) -> StdioEntries {
 #endif // ENABLE_LIBUSBHSFS
 
 
-    // ⭐⭐⭐ GLOBALER FILTER – VERSTECKT ALLE SYSTEM-PARTITIONEN ⭐⭐⭐
+        // --- Rename mounts for display ---
+    for (auto &e : out) {
+        // microSD card → SD-CARD
+        if (e.display_name == "microSD card" || e.name == "microSD card") {
+            e.display_name = "SD-CARD";
+            e.name = "SD-CARD";
+        }
+
+        // umsX: → USB-DEVICE
+        if (e.name.rfind("ums", 0) == 0) {
+            e.display_name = "USB-DEVICE";
+            e.name = "USB-DEVICE";
+        }
+    }
+
+// ⭐⭐⭐ GLOBALER FILTER – VERSTECKT ALLE SYSTEM-PARTITIONEN ⭐⭐⭐
     {
         static const std::vector<std::string> hidden = {
             "ALBUM",
