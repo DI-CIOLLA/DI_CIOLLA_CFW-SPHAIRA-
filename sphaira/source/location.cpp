@@ -15,10 +15,32 @@
 #endif
 
 namespace sphaira::location {
-namespace {
 
-} // namespace
+enum SortKey {
+    SORT_USB = 0,
+    SORT_SD = 1,
+    SORT_GAMES = 2,
+    SORT_ALBUM = 3,
+    SORT_USER = 4,
+    SORT_SYSTEM = 5,
+    SORT_SAFE = 6,
+    SORT_PRODINFO = 7,
+    SORT_OTHER = 99
+};
 
+static SortKey GetSortKey(const std::string& name) {
+
+    if (name.rfind("ums", 0) == 0)      return SORT_USB;
+    if (name == "sdmc")                 return SORT_SD;
+    if (name == "games")                return SORT_GAMES;
+    if (name == "album")                return SORT_ALBUM;
+    if (name == "user")                 return SORT_USER;
+    if (name == "system")               return SORT_SYSTEM;
+    if (name == "safe")                 return SORT_SAFE;
+    if (name == "prodinfo")             return SORT_PRODINFO;
+
+    return SORT_OTHER;
+}
 
 auto GetStdio(bool write) -> StdioEntries {
     StdioEntries out{};
@@ -32,28 +54,28 @@ auto GetStdio(bool write) -> StdioEntries {
             }
 
             if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)
-                e.name += i18n::get(" (Read Only)");
+                e.display_name += i18n::get(" (Read Only)");
 
+            e.sort_key = GetSortKey(e.name);
             out.emplace_back(e);
         }
     };
+
 
     // devoptab mounts
     {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
-            log_write("[LOCATION] got devoptab mounts: %zu\n", entries.size());
             add_from_entries(entries, out, write);
         }
     }
 
 
 #ifdef ENABLE_LIBUSBDVD
-    // libusbdvd only supports reading
     if (!write) {
         StdioEntry entry;
         if (usbdvd::GetMountPoint(entry)) {
-            log_write("[LOCATION] got dvd mount: %s\n", entry.name.c_str());
+            entry.sort_key = SORT_OTHER;
             out.emplace_back(entry);
         }
     }
@@ -63,70 +85,49 @@ auto GetStdio(bool write) -> StdioEntries {
 #ifdef ENABLE_LIBUSBHSFS
 
     if (!App::GetHddEnable()) {
-        log_write("[USBHSFS] not enabled\n");
         return out;
     }
 
-    // USB device list
     static UsbHsFsDevice devices[0x20];
     const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
-    log_write("[USBHSFS] got connected: %u\n", usbHsFsGetPhysicalDeviceCount());
-    log_write("[USBHSFS] got count: %u\n", count);
 
     for (s32 i = 0; i < count; i++) {
-        const auto& e = devices[i];
+        const auto& d = devices[i];
 
-        if (write && (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly))) {
-            log_write("[USBHSFS] skipping write protect\n");
+        if (write && (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)))
             continue;
-        }
 
         char display_name[256];
         snprintf(display_name, sizeof(display_name),
                 "USB-DEVICE (%s - %s - %zu GB)",
-                LIBUSBHSFS_FS_TYPE_STR(e.fs_type),
-                (e.product_name[0] ? e.product_name : "Unknown"),
-                (size_t)(e.capacity / 1024 / 1024 / 1024));
+                LIBUSBHSFS_FS_TYPE_STR(d.fs_type),
+                (d.product_name[0] ? d.product_name : "Unknown"),
+                (size_t)(d.capacity / 1024 / 1024 / 1024));
+
+        // wichtig: interner mountname bleibt ORIGINAL → ums0 / ums1
+        std::string mountname = d.name;
 
         u32 flags = 0;
-        if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly))
+        if (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly))
             flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
 
-        // WICHTIG: Name MUSS USB-DEVICE sein → Sortierung funktioniert
-        out.emplace_back("USB-DEVICE", display_name, flags);
+        StdioEntry entry;
+        entry.name = mountname;               // intern = ums0 → FUNKTIONIERT!
+        entry.display_name = display_name;    // angezeigt = USB-DEVICE (…)
+        entry.flags = flags;
+        entry.sort_key = SORT_USB;            // immer ganz oben
 
-        log_write("\t[USBHSFS] USB: %s serial: %s man: %s\n",
-                e.product_name, e.serial_number, e.manufacturer);
+        out.emplace_back(entry);
     }
 
 #endif // ENABLE_LIBUSBHSFS
 
 
-    // ----------------------------
-    // Sortierung (USB immer oben)
-    // ----------------------------
+    std::sort(out.begin(), out.end(), [&](auto& a, auto& b) {
+        if (a.sort_key != b.sort_key) 
+            return a.sort_key < b.sort_key;
 
-    static const std::vector<std::string> ORDER = {
-        "USB-DEVICE",
-        "SD-CARD",
-        "GAMES",
-        "ALBUM",
-        "USER",
-        "SYSTEM",
-        "SAFE",
-        "PRODINFO"
-    };
-
-    std::sort(out.begin(), out.end(), [&](auto& a, auto& b){
-        auto ia = std::find(ORDER.begin(), ORDER.end(), a.name);
-        auto ib = std::find(ORDER.begin(), ORDER.end(), b.name);
-
-        // Falls Eintrag nicht in ORDER → ganz unten
-        if (ia == ORDER.end() && ib == ORDER.end()) return a.name < b.name;
-        if (ia == ORDER.end()) return false;
-        if (ib == ORDER.end()) return true;
-
-        return ia < ib;
+        return a.display_name < b.display_name;
     });
 
     return out;
