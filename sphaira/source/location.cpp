@@ -17,7 +17,8 @@
 namespace sphaira::location {
 
 static int GetPriority(const std::string& name) {
-    // USB ganz oben (ums0, ums1, ...)
+
+    // USB zuerst (ums0, ums1, ...)
     if (name.rfind("ums", 0) == 0)
         return 0;
 
@@ -35,24 +36,24 @@ static int GetPriority(const std::string& name) {
 auto GetStdio(bool write) -> StdioEntries {
     StdioEntries out{};
 
-    const auto add_from_entries = [&](StdioEntries& entries, bool write) {
+    const auto add_from_entries = [&](StdioEntries& entries) {
         for (auto e : entries) {
 
             if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly))
                 continue;
 
             if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)
-                e.label += i18n::get(" (Read Only)");
+                e.display_name += i18n::get(" (Read Only)");
 
             out.emplace_back(e);
         }
     };
 
-    // devoptab mounts
+    // Devoptab mounts (sdmc, safe, system…)
     {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
-            add_from_entries(entries, write);
+            add_from_entries(entries);
         }
     }
 
@@ -80,16 +81,18 @@ auto GetStdio(bool write) -> StdioEntries {
         if (write && (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)))
             continue;
 
-        char label[256];
-        snprintf(label, sizeof(label),
+        char display_name[256];
+        snprintf(display_name, sizeof(display_name),
                 "USB-DEVICE (%s - %s - %zu GB)",
                 LIBUSBHSFS_FS_TYPE_STR(d.fs_type),
                 (d.product_name[0] ? d.product_name : "Unknown"),
                 (size_t)(d.capacity / 1024 / 1024 / 1024));
 
         StdioEntry entry;
-        entry.name = d.name;   // WICHTIG: ums0 → Dateizugriff funktioniert
-        entry.label = label;   // Was im Menü angezeigt wird
+
+        // WICHTIG: echter Mountname bleibt ums0 → sonst liest USB nicht!
+        entry.name = d.name;
+        entry.display_name = display_name;
         entry.flags = (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly))
                       ? FsEntryFlag::FsEntryFlag_ReadOnly
                       : 0;
@@ -100,15 +103,16 @@ auto GetStdio(bool write) -> StdioEntries {
 #endif // ENABLE_LIBUSBHSFS
 
 
-    // Sortierung nach Priorität
+    // Sortierung
     std::sort(out.begin(), out.end(), [&](auto& a, auto& b){
+
         int pa = GetPriority(a.name);
         int pb = GetPriority(b.name);
 
         if (pa != pb)
             return pa < pb;
 
-        return a.label < b.label;
+        return a.display_name < b.display_name;
     });
 
     return out;
