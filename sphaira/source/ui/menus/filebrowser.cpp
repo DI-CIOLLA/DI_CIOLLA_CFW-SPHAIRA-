@@ -77,12 +77,12 @@ private:
 std::atomic_bool g_change_signalled{};
 
 constexpr FsEntry FS_ENTRY_DEFAULT{
-    "microSD card", "/", FsType::Sd, FsEntryFlag_Assoc | FsEntryFlag_IsSd,
+    "SD-CARD", "/", FsType::Sd, FsEntryFlag_Assoc | FsEntryFlag_IsSd,
 };
 
 constexpr FsEntry FS_ENTRIES[]{
     FS_ENTRY_DEFAULT,
-    { "Album", "/", FsType::ImageSd},
+    { "ALBUM", "/", FsType::ImageSd},
 };
 
 constexpr std::string_view AUDIO_EXTENSIONS[] = {
