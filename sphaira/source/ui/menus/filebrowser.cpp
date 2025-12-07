@@ -1220,11 +1220,7 @@ void FsView::OnDeleteCallback() {
     // check if we only have 1 file / folder
     if (m_menu->m_selected.m_files.size() == 1) {
         const auto& entry = m_menu->m_selected.m_files[0];
-        const auto full_path = GetNewPath(m_menu->m_selected.m_path, // Rename umsX: devices only for display
-    if (entry.name.rfind("ums", 0) == 0) {
-        entry.name = "USB-DEVICE";
-    }
-    entry.name);
+        const auto full_path = GetNewPath(m_menu->m_selected.m_path, entry.name);
 
         if (entry.IsDir()) {
             bool empty{};
