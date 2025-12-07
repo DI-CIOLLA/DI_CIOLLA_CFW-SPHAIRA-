@@ -21,16 +21,14 @@ struct File {
 };
 
 struct Dir {
-    DIR* dir;
-    location::StdioEntries* entries;
-    u32 index;
+    DIR* dir{};
+    location::StdioEntries* entries{};
+    u32 index{};
 };
 
 struct Device final : common::MountDevice {
     Device(const common::MountConfig& _config)
-    : MountDevice{_config} {
-
-    }
+        : MountDevice{_config} {}
 
 private:
     bool Mount() override { return true; }
@@ -54,25 +52,21 @@ private:
     int devoptab_utimes(const char *path, const struct timeval times[2]) override;
 };
 
-// converts "/[SMB] pi:/folder/file.txt" to "pi:"
+// Fixes devoptab paths
 auto FixPath(const char* path) -> std::pair<fs::FsPath, std::string_view> {
-    while (*path == '/') {
-        path++;
-    }
+    while (*path == '/') path++;
 
     std::string_view mount_name = path;
-    const auto dilem = mount_name.find_first_of(':');
-    if (dilem == std::string_view::npos) {
+    const auto pos = mount_name.find_first_of(':');
+
+    if (pos == std::string_view::npos)
         return {path, {}};
-    }
-    mount_name = mount_name.substr(0, dilem + 1);
+
+    mount_name = mount_name.substr(0, pos + 1);
 
     fs::FsPath fixed_path = path;
-    if (fixed_path.ends_with(":")) {
-        fixed_path += '/';
-    }
+    if (fixed_path.ends_with(":")) fixed_path += '/';
 
-    log_write("[MOUNTS] FixPath: %s -> %s, mount: %.*s\n", path, fixed_path.s, (int)mount_name.size(), mount_name.data());
     return {fixed_path, mount_name};
 }
 
@@ -80,16 +74,10 @@ int Device::devoptab_open(void *fileStruct, const char *_path, int flags, int mo
     auto file = static_cast<File*>(fileStruct);
 
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        log_write("[MOUNTS] devoptab_open: invalid path: %s\n", _path);
-        return -ENOENT;
-    }
+    if (mount_name.empty()) return -ENOENT;
 
     file->fd = open(path, flags, mode);
-    if (file->fd < 0) {
-        log_write("[MOUNTS] devoptab_open: failed to open %s: %s\n", path.s, std::strerror(errno));
-        return -errno;
-    }
+    if (file->fd < 0) return -errno;
 
     return 0;
 }
@@ -97,63 +85,43 @@ int Device::devoptab_open(void *fileStruct, const char *_path, int flags, int mo
 int Device::devoptab_close(void *fd) {
     auto file = static_cast<File*>(fd);
     std::memset(file, 0, sizeof(*file));
-
     return 0;
 }
 
 ssize_t Device::devoptab_read(void *fd, char *ptr, size_t len) {
-    auto file = static_cast<File*>(fd);
-    return read(file->fd, ptr, len);
+    return read(static_cast<File*>(fd)->fd, ptr, len);
 }
 
 ssize_t Device::devoptab_seek(void *fd, off_t pos, int dir) {
-    auto file = static_cast<File*>(fd);
-    return lseek(file->fd, pos, dir);
+    return lseek(static_cast<File*>(fd)->fd, pos, dir);
 }
 
 int Device::devoptab_fstat(void *fd, struct stat *st) {
-    auto file = static_cast<File*>(fd);
-    return fstat(file->fd, st);
+    return fstat(static_cast<File*>(fd)->fd, st);
 }
 
 int Device::devoptab_unlink(const char *_path) {
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        log_write("[MOUNTS] devoptab_unlink: invalid path: %s\n", _path);
-        return -ENOENT;
-    }
-
+    if (mount_name.empty()) return -ENOENT;
     return unlink(path);
 }
 
 int Device::devoptab_rename(const char *_oldName, const char *_newName) {
-    const auto [oldName, old_mount_name] = FixPath(_oldName);
-    const auto [newName, new_mount_name] = FixPath(_newName);
-    if (old_mount_name.empty() || new_mount_name.empty() || old_mount_name != new_mount_name) {
-        log_write("[MOUNTS] devoptab_rename: invalid path: %s or %s\n", _oldName, _newName);
-        return -ENOENT;
-    }
-
+    const auto [oldName, m1] = FixPath(_oldName);
+    const auto [newName, m2] = FixPath(_newName);
+    if (m1.empty() || m2.empty() || m1 != m2) return -ENOENT;
     return rename(oldName, newName);
 }
 
 int Device::devoptab_mkdir(const char *_path, int mode) {
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        log_write("[MOUNTS] devoptab_mkdir: invalid path: %s\n", _path);
-        return -ENOENT;
-    }
-
+    if (mount_name.empty()) return -ENOENT;
     return mkdir(path, mode);
 }
 
 int Device::devoptab_rmdir(const char *_path) {
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        log_write("[MOUNTS] devoptab_rmdir: invalid path: %s\n", _path);
-        return -ENOENT;
-    }
-
+    if (mount_name.empty()) return -ENOENT;
     return rmdir(path);
 }
 
@@ -161,88 +129,70 @@ int Device::devoptab_diropen(void* fd, const char *_path) {
     auto dir = static_cast<Dir*>(fd);
     const auto [path, mount_name] = FixPath(_path);
 
+    // Root of mount list → show StdioEntries
     if (mount_name.empty()) {
         dir->entries = new location::StdioEntries();
-        const auto entries = location::GetStdio(false);
+        auto entries = location::GetStdio(false);
 
-        // ----------------------------------------------------------
-        //  🔥 HIER ist dein Filter – einzige Änderung im gesamten Code
-        // ----------------------------------------------------------
-        static const std::vector<std::string> hidden_names = {
-            "ALBUM",
-            "GAMES",
-            "PRODINFOF",
-            "SAFE",
-            "USER",
-            "SYSTEM"
+        // --- SYSTEM PARTITION FILTER ---
+        static const std::vector<std::string> hidden = {
+            "ALBUM", "GAMES", "PRODINFOF", "SAFE", "USER", "SYSTEM"
         };
 
+        auto is_hidden = [&](const std::string& name) {
+            for (auto& s : hidden) {
+                if (name.find(s) != std::string::npos)
+                    return true;
+            }
+            return false;
+        };
+        // --------------------------------
+
         for (auto& entry : entries) {
-            // Nur diesen Filter hinzugefügt – sonst NICHTS
-            if (std::find(hidden_names.begin(), hidden_names.end(), entry.name) != hidden_names.end()) {
+            if (is_hidden(entry.name))
                 continue;
-            }
 
-            if (entry.fs_hidden) {
-                continue;
-            }
-
-            dir->entries->emplace_back(std::move(entry));
-        }
-
-        return 0;
-    } else {
-        dir->dir = opendir(path);
-        if (!dir->dir) {
-            log_write("[MOUNTS] devoptab_diropen: failed to open dir %s: %s\n", path.s, std::strerror(errno));
-            return -errno;
+            if (!entry.fs_hidden)
+                dir->entries->emplace_back(std::move(entry));
         }
 
         return 0;
     }
 
-    return -ENOENT;
-}
-
-int Device::devoptab_dirreset(void* fd) {
-    auto dir = static_cast<Dir*>(fd);
-
-    if (dir->dir) {
-        rewinddir(dir->dir);
-    } else {
-        dir->index = 0;
-    }
+    dir->dir = opendir(path);
+    if (!dir->dir) return -errno;
 
     return 0;
 }
 
+int Device::devoptab_dirreset(void* fd) {
+    auto dir = static_cast<Dir*>(fd);
+    if (dir->dir) rewinddir(dir->dir);
+    else dir->index = 0;
+    return 0;
+}
+
 int Device::devoptab_dirnext(void* fd, char *filename, struct stat *filestat) {
-    log_write("[MOUNTS] devoptab_dirnext\n");
     auto dir = static_cast<Dir*>(fd);
 
     if (dir->dir) {
         const auto entry = readdir(dir->dir);
-        if (!entry) {
-            log_write("[MOUNTS] devoptab_dirnext: no more entries\n");
-            return -ENOENT;
-        }
+        if (!entry) return -ENOENT;
 
         filestat->st_nlink = 1;
         filestat->st_mode = entry->d_type == DT_DIR ? S_IFDIR : S_IFREG;
         std::snprintf(filename, NAME_MAX, "%s", entry->d_name);
     } else {
-        if (dir->index >= dir->entries->size()) {
-            return -ENOENT;
-        }
+        if (dir->index >= dir->entries->size()) return -ENOENT;
 
         const auto& entry = (*dir->entries)[dir->index];
         filestat->st_nlink = 1;
-        filestat->st_mode = S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH;
-        if (entry.mount.ends_with(":/")) {
+        filestat->st_mode = S_IFDIR;
+
+        if (entry.mount.ends_with(":/"))
             std::snprintf(filename, NAME_MAX, "%s", entry.mount.substr(0, entry.mount.size() - 1).c_str());
-        } else {
+        else
             std::snprintf(filename, NAME_MAX, "%s", entry.mount.c_str());
-        }
     }
 
     dir->index++;
@@ -251,55 +201,37 @@ int Device::devoptab_dirnext(void* fd, char *filename, struct stat *filestat) {
 
 int Device::devoptab_dirclose(void* fd) {
     auto dir = static_cast<Dir*>(fd);
-
-    if (dir->dir) {
-        closedir(dir->dir);
-    } else if (dir->entries) {
-        delete dir->entries;
-    }
-
+    if (dir->dir) closedir(dir->dir);
+    if (dir->entries) delete dir->entries;
     return 0;
 }
 
 int Device::devoptab_lstat(const char *_path, struct stat *st) {
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        st->st_nlink = 1;
-        st->st_mode = S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH;
-    } else {
-        return lstat(path, st);
-    }
+    if (!mount_name.empty()) return lstat(path, st);
 
-    return -ENOENT;
+    st->st_nlink = 1;
+    st->st_mode = S_IFDIR;
+    return 0;
 }
 
 int Device::devoptab_ftruncate(void *fd, off_t len) {
-    auto file = static_cast<File*>(fd);
-    return ftruncate(file->fd, len);
+    return ftruncate(static_cast<File*>(fd)->fd, len);
 }
 
 int Device::devoptab_statvfs(const char *_path, struct statvfs *buf) {
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        log_write("[MOUNTS] devoptab_statvfs: invalid path: %s\n", _path);
-        return -ENOENT;
-    }
-
+    if (mount_name.empty()) return -ENOENT;
     return statvfs(path, buf);
 }
 
 int Device::devoptab_fsync(void *fd) {
-    auto file = static_cast<File*>(fd);
-    return fsync(file->fd);
+    return fsync(static_cast<File*>(fd)->fd);
 }
 
 int Device::devoptab_utimes(const char *_path, const struct timeval times[2]) {
     const auto [path, mount_name] = FixPath(_path);
-    if (mount_name.empty()) {
-        log_write("[MOUNTS] devoptab_utimes: invalid path: %s\n", _path);
-        return -ENOENT;
-    }
-
+    if (mount_name.empty()) return -ENOENT;
     return utimes(path, times);
 }
 
@@ -315,12 +247,12 @@ Result MountInternalMounts() {
         config,
         sizeof(File), sizeof(Dir),
         "mounts", "mounts:/"
-    )) {
-        log_write("[MOUNTS] Failed to mount\n");
+    ))
+    {
         R_THROW(0x1);
     }
 
-    R_SUCCEED();
+    return 0;
 }
 
 } // namespace sphaira::devoptab
