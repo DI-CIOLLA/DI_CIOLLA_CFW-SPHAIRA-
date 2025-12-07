@@ -974,7 +974,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
             // the file name needs to be relative to the current directory.
             const char* file_name_in_zip = file_path.s + std::strlen(m_path);
 
-            // strip root path (/ or ums0:)
+            // strip root path (/ or USB-DEVICE)
             if (!std::strncmp(file_name_in_zip, m_fs->Root(), std::strlen(m_fs->Root()))) {
                 file_name_in_zip += std::strlen(m_fs->Root());
             }
@@ -1220,7 +1220,11 @@ void FsView::OnDeleteCallback() {
     // check if we only have 1 file / folder
     if (m_menu->m_selected.m_files.size() == 1) {
         const auto& entry = m_menu->m_selected.m_files[0];
-        const auto full_path = GetNewPath(m_menu->m_selected.m_path, entry.name);
+        const auto full_path = GetNewPath(m_menu->m_selected.m_path, // Rename umsX: devices only for display
+    if (entry.name.rfind("ums", 0) == 0) {
+        entry.name = "USB-DEVICE";
+    }
+    entry.name);
 
         if (entry.IsDir()) {
             bool empty{};
