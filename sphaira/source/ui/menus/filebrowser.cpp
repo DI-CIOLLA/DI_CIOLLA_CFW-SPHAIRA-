@@ -80,11 +80,6 @@ constexpr FsEntry FS_ENTRY_DEFAULT{
     "SD-CARD", "/", FsType::Sd, FsEntryFlag_Assoc | FsEntryFlag_IsSd,
 };
 
-constexpr FsEntry FS_ENTRIES[]{
-    FS_ENTRY_DEFAULT,
-    { "ALBUM", "/", FsType::ImageSd},
-};
-
 constexpr std::string_view AUDIO_EXTENSIONS[] = {
     "mp3", "ogg", "flac", "wav", "aac", "ac3", "aif", "asf", "bfwav",
     "bfsar", "bfstm", "bwav",
