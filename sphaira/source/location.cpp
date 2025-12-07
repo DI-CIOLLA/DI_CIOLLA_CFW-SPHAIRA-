@@ -5,7 +5,6 @@
 #include "i18n.hpp"
 
 #include <cstring>
-#include <algorithm>
 
 #ifdef ENABLE_LIBUSBDVD
     #include "usbdvd.hpp"
@@ -23,9 +22,9 @@ auto GetStdio(bool write) -> StdioEntries {
     const auto add_from_entries = [](StdioEntries& entries, StdioEntries& out, bool write) {
         for (auto& e : entries) {
 
-            // -----------------------------------------------------
-            // RENAME (Benutzervorgaben)
-            // -----------------------------------------------------
+            // --------------------------------------
+            // RENAME DEFAULT DEVICES
+            // --------------------------------------
             if (e.name == "ums0")
                 e.name = "USB-DEVICE";
 
@@ -38,7 +37,7 @@ auto GetStdio(bool write) -> StdioEntries {
             if (e.name == "Album")
                 e.name = "ALBUM";
 
-            // -----------------------------------------------------
+            // --------------------------------------
 
             if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)) {
                 continue;
@@ -52,9 +51,9 @@ auto GetStdio(bool write) -> StdioEntries {
         }
     };
 
-    // -----------------------------------------------------
-    // NETWORK / NORMAL MOUNTPOINTS
-    // -----------------------------------------------------
+    // -------------------------------------------
+    // NORMAL DEVOPTAB MOUNTS
+    // -------------------------------------------
     {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
@@ -78,22 +77,23 @@ auto GetStdio(bool write) -> StdioEntries {
         const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
 
         for (s32 i = 0; i < count; i++) {
-            const auto& d = devices[i];
+            const auto& e = devices[i];
 
-            if (write && (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)))
+            if (write && (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)))
                 continue;
 
-            // -----------------------------
-            // USB-DEVICE richtig erzeugen!
-            // -----------------------------
-
+            // -------------------------------------------
+            // BUILD REAL USB ENTRY (NO FAKE DISPLAY NAME)
+            // -------------------------------------------
             StdioEntry usb;
 
-            usb.name = "USB-DEVICE";
-            usb.mount_point = d.mount_point;          // WICHTIG: echtes FS!
-            usb.flags = 0;
+            usb.name = "USB-DEVICE";               // visible name
 
-            if (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)) {
+            usb.mount_point = e.mount_point;       // REAL mount path from USBHSFS
+                                                   // (this fixes "cannot read files")
+
+            usb.flags = 0;
+            if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)) {
                 usb.flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
                 usb.name += " (Read Only)";
             }
@@ -107,20 +107,18 @@ auto GetStdio(bool write) -> StdioEntries {
     }
 #endif
 
-    // -----------------------------------------------------
-    // SORTIERUNG – USB-DEVICE IMMER GANZ OBEN
-    // -----------------------------------------------------
+    // -------------------------------------------
+    // SORTING: USB FIRST
+    // -------------------------------------------
     std::sort(out.begin(), out.end(),
         [](const StdioEntry& a, const StdioEntry& b) {
 
-            // USB-DEVICE hat höchste Priorität
             bool a_usb = a.name.rfind("USB-DEVICE", 0) == 0;
             bool b_usb = b.name.rfind("USB-DEVICE", 0) == 0;
 
             if (a_usb && !b_usb) return true;
             if (!a_usb && b_usb) return false;
 
-            // danach alphabetisch
             return a.name < b.name;
         }
     );
