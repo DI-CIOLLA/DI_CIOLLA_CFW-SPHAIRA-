@@ -23,25 +23,30 @@ auto GetStdio(bool write) -> StdioEntries {
     const auto add_from_entries = [](StdioEntries& entries, StdioEntries& out, bool write) {
         for (auto& e : entries) {
 
-            // rename according to user rules
+            //---------------------------------------------------
+            // RENAME DEVICES (your requested names)
+            //---------------------------------------------------
             if (e.name == "ums0")
-                e.display = "USB-DEVICE";
+                e.name = "USB-DEVICE";
 
             if (e.name == "microSD card")
-                e.display = "SD-CARD";
+                e.name = "SD-CARD";
 
             if (e.name == "games")
-                e.display = "GAMES";
+                e.name = "GAMES";
 
             if (e.name == "Album")
-                e.display = "ALBUM";
+                e.name = "ALBUM";
+
+            //---------------------------------------------------
 
             if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)) {
+                log_write("[STDIO] skipping read only mount: %s\n", e.name.c_str());
                 continue;
             }
 
             if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly) {
-                e.display += " (Read Only)";
+                e.name += " (Read Only)";
             }
 
             out.emplace_back(e);
@@ -84,29 +89,27 @@ auto GetStdio(bool write) -> StdioEntries {
                           e.capacity / 1024 / 1024 / 1024);
 
             u32 flags = 0;
-            if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)) {
+            if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly))
                 flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
-            }
 
-            out.emplace_back("ums0", display_name, flags);
+            out.emplace_back("USB-DEVICE", display_name, flags);
         }
     }
 #endif
 
-    // -------------------------
-    // SORTING (USB always first)
-    // -------------------------
-
+    //---------------------------------------------------
+    // SORTING: USB-DEVICE ALWAYS FIRST
+    //---------------------------------------------------
     std::sort(out.begin(), out.end(),
         [](const StdioEntry& a, const StdioEntry& b) {
 
-            // USB-DEVICE always first
-            if (a.display.rfind("USB-DEVICE", 0) == 0) return true;
-            if (b.display.rfind("USB-DEVICE", 0) == 0) return false;
+            // USB-DEVICE always at top
+            if (a.name.rfind("USB-DEVICE", 0) == 0) return true;
+            if (b.name.rfind("USB-DEVICE", 0) == 0) return false;
 
-            // alphabetical fallback
-            return a.display < b.display;
-    });
+            return a.name < b.name;
+        }
+    );
 
     return out;
 }
