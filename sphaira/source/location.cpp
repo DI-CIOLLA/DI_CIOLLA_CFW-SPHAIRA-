@@ -49,9 +49,11 @@ auto GetStdio(bool write) -> StdioEntries {
 
 
 #ifdef ENABLE_LIBUSBDVD
+    // libusbdvd only supports reading
     if (!write) {
         StdioEntry entry;
         if (usbdvd::GetMountPoint(entry)) {
+            log_write("[LOCATION] got dvd mount: %s\n", entry.name.c_str());
             out.emplace_back(entry);
         }
     }
@@ -65,7 +67,7 @@ auto GetStdio(bool write) -> StdioEntries {
         return out;
     }
 
-    // USB devices
+    // USB device list
     static UsbHsFsDevice devices[0x20];
     const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
     log_write("[USBHSFS] got connected: %u\n", usbHsFsGetPhysicalDeviceCount());
@@ -79,28 +81,31 @@ auto GetStdio(bool write) -> StdioEntries {
             continue;
         }
 
-        char display_name[0x100];
-        std::snprintf(display_name, sizeof(display_name),
-                      "USB-DEVICE (%s - %s - %zu GB)",
-                      LIBUSBHSFS_FS_TYPE_STR(e.fs_type),
-                      (e.product_name[0] ? e.product_name : "Unknown"),
-                      (size_t)(e.capacity / 1024 / 1024 / 1024));
+        char display_name[256];
+        snprintf(display_name, sizeof(display_name),
+                "USB-DEVICE (%s - %s - %zu GB)",
+                LIBUSBHSFS_FS_TYPE_STR(e.fs_type),
+                (e.product_name[0] ? e.product_name : "Unknown"),
+                (size_t)(e.capacity / 1024 / 1024 / 1024));
 
         u32 flags = 0;
         if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly))
             flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
 
-        // name verändert → wichtig für Sortierung
+        // WICHTIG: Name MUSS USB-DEVICE sein → Sortierung funktioniert
         out.emplace_back("USB-DEVICE", display_name, flags);
 
         log_write("\t[USBHSFS] USB: %s serial: %s man: %s\n",
-                  e.product_name, e.serial_number, e.manufacturer);
+                e.product_name, e.serial_number, e.manufacturer);
     }
 
 #endif // ENABLE_LIBUSBHSFS
 
 
-    // Richtige Reihenfolge
+    // ----------------------------
+    // Sortierung (USB immer oben)
+    // ----------------------------
+
     static const std::vector<std::string> ORDER = {
         "USB-DEVICE",
         "SD-CARD",
@@ -115,6 +120,12 @@ auto GetStdio(bool write) -> StdioEntries {
     std::sort(out.begin(), out.end(), [&](auto& a, auto& b){
         auto ia = std::find(ORDER.begin(), ORDER.end(), a.name);
         auto ib = std::find(ORDER.begin(), ORDER.end(), b.name);
+
+        // Falls Eintrag nicht in ORDER → ganz unten
+        if (ia == ORDER.end() && ib == ORDER.end()) return a.name < b.name;
+        if (ia == ORDER.end()) return false;
+        if (ib == ORDER.end()) return true;
+
         return ia < ib;
     });
 
