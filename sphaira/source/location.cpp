@@ -23,9 +23,9 @@ auto GetStdio(bool write) -> StdioEntries {
     const auto add_from_entries = [](StdioEntries& entries, StdioEntries& out, bool write) {
         for (auto& e : entries) {
 
-            //---------------------------------------------------
-            // RENAME DEVICES (your requested names)
-            //---------------------------------------------------
+            // -----------------------------------------------------
+            // RENAME (Benutzervorgaben)
+            // -----------------------------------------------------
             if (e.name == "ums0")
                 e.name = "USB-DEVICE";
 
@@ -38,10 +38,9 @@ auto GetStdio(bool write) -> StdioEntries {
             if (e.name == "Album")
                 e.name = "ALBUM";
 
-            //---------------------------------------------------
+            // -----------------------------------------------------
 
             if (write && (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)) {
-                log_write("[STDIO] skipping read only mount: %s\n", e.name.c_str());
                 continue;
             }
 
@@ -53,6 +52,9 @@ auto GetStdio(bool write) -> StdioEntries {
         }
     };
 
+    // -----------------------------------------------------
+    // NETWORK / NORMAL MOUNTPOINTS
+    // -----------------------------------------------------
     {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
@@ -76,37 +78,49 @@ auto GetStdio(bool write) -> StdioEntries {
         const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
 
         for (s32 i = 0; i < count; i++) {
-            const auto& e = devices[i];
+            const auto& d = devices[i];
 
-            if (write && (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)))
+            if (write && (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)))
                 continue;
 
-            char display_name[0x100];
-            std::snprintf(display_name, sizeof(display_name),
-                          "USB-DEVICE (%s - %s - %zu GB)",
-                          LIBUSBHSFS_FS_TYPE_STR(e.fs_type),
-                          e.product_name,
-                          e.capacity / 1024 / 1024 / 1024);
+            // -----------------------------
+            // USB-DEVICE richtig erzeugen!
+            // -----------------------------
 
-            u32 flags = 0;
-            if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly))
-                flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
+            StdioEntry usb;
 
-            out.emplace_back("USB-DEVICE", display_name, flags);
+            usb.name = "USB-DEVICE";
+            usb.mount_point = d.mount_point;          // WICHTIG: echtes FS!
+            usb.flags = 0;
+
+            if (d.write_protect || (d.flags & UsbHsFsMountFlags_ReadOnly)) {
+                usb.flags |= FsEntryFlag::FsEntryFlag_ReadOnly;
+                usb.name += " (Read Only)";
+            }
+
+            usb.dump_path = "";
+            usb.fs_hidden = false;
+            usb.dump_hidden = false;
+
+            out.emplace_back(usb);
         }
     }
 #endif
 
-    //---------------------------------------------------
-    // SORTING: USB-DEVICE ALWAYS FIRST
-    //---------------------------------------------------
+    // -----------------------------------------------------
+    // SORTIERUNG – USB-DEVICE IMMER GANZ OBEN
+    // -----------------------------------------------------
     std::sort(out.begin(), out.end(),
         [](const StdioEntry& a, const StdioEntry& b) {
 
-            // USB-DEVICE always at top
-            if (a.name.rfind("USB-DEVICE", 0) == 0) return true;
-            if (b.name.rfind("USB-DEVICE", 0) == 0) return false;
+            // USB-DEVICE hat höchste Priorität
+            bool a_usb = a.name.rfind("USB-DEVICE", 0) == 0;
+            bool b_usb = b.name.rfind("USB-DEVICE", 0) == 0;
 
+            if (a_usb && !b_usb) return true;
+            if (!a_usb && b_usb) return false;
+
+            // danach alphabetisch
             return a.name < b.name;
         }
     );
