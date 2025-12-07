@@ -44,6 +44,9 @@
 #include <span>
 #include <utility>
 #include <ranges>
+#include <array>
+#include <cctype>
+#include <algorithm>
 
 #ifdef ENABLE_LIBUSBDVD
 #include <usbdvd.h>
@@ -53,6 +56,34 @@ namespace sphaira::ui::menu::filebrowser {
 namespace {
 
 using RomDatabaseIndexs = std::vector<size_t>;
+
+// -----------------------
+// Helper: versteckte Systemnamen
+// -----------------------
+static inline bool IsHiddenSystemName(const std::string& name) {
+    static const std::array<const char*,6> hidden = {
+        "ALBUM",
+        "GAMES",
+        "PRODINFOF",
+        "SAFE",
+        "USER",
+        "SYSTEM"
+    };
+
+    // Case-insensitive contains check (robust)
+    auto toLower = [](std::string s){
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
+        return s;
+    };
+
+    const std::string n = toLower(name);
+    for (const auto& h : hidden) {
+        std::string hh = toLower(std::string(h));
+        if (n.find(hh) != std::string::npos) return true;
+    }
+    return false;
+}
+// -----------------------
 
 struct ForwarderForm final : public FormSidebar {
     explicit ForwarderForm(const FileAssocEntry& assoc, const RomDatabaseIndexs& db_indexs, const FileEntry& entry, const fs::FsPath& arg_path);
@@ -77,12 +108,12 @@ private:
 std::atomic_bool g_change_signalled{};
 
 constexpr FsEntry FS_ENTRY_DEFAULT{
-    "SD-CARD", "/", FsType::Sd, FsEntryFlag_Assoc | FsEntryFlag_IsSd,
+    "microSD card", "/", FsType::Sd, FsEntryFlag_Assoc | FsEntryFlag_IsSd,
 };
 
 constexpr FsEntry FS_ENTRIES[]{
     FS_ENTRY_DEFAULT,
-    { "ALBUM", "/", FsType::ImageSd},
+    // Album removed here intentionally to avoid showing ALBUM in mounts.
 };
 
 constexpr std::string_view AUDIO_EXTENSIONS[] = {
@@ -200,7 +231,6 @@ constexpr fs::FsPath DAYBREAK_PATH{"/switch/daybreak.nro"};
 
 // tries to find database path using folder name
 // names are taken from retropie
-// retroarch database names can also be used
 auto GetRomDatabaseFromPath(std::string_view path) -> RomDatabaseIndexs {
     if (path.length() <= 1) {
         return {};
@@ -974,7 +1004,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
             // the file name needs to be relative to the current directory.
             const char* file_name_in_zip = file_path.s + std::strlen(m_path);
 
-            // strip root path (/ or USB-DEVICE:)
+            // strip root path (/ or ums0:)
             if (!std::strncmp(file_name_in_zip, m_fs->Root(), std::strlen(m_fs->Root()))) {
                 file_name_in_zip += std::strlen(m_fs->Root());
             }
@@ -1081,6 +1111,14 @@ auto FsView::Scan(fs::FsPath new_path, bool is_walk_up) -> Result {
                         break;
                     }
                 }
+            }
+        }
+
+        // NEW: hide system folder names (Album, Games, etc.)
+        if (!hidden) {
+            if (IsHiddenSystemName(e.name)) {
+                hidden = true;
+                log_write("[FILEBROWSER] Hiding system folder in scan: %s\n", e.name);
             }
         }
 
@@ -1628,14 +1666,25 @@ void FsView::DisplayOptions() {
     }
 
     const auto stdio_locations = location::GetStdio(false);
+
+    // ---------------------------
+    // System-Mount-Filter (ALBUM etc.)
+    // ---------------------------
     for (const auto& e: stdio_locations) {
         if (e.fs_hidden) {
+            continue;
+        }
+
+        // Filter anwenden: wenn der Anzeigename (e.name) einen der Hidden-Bezeichner enthält, überspringen
+        if (IsHiddenSystemName(e.name)) {
+            log_write("[FILEBROWSER] hiding system mount: %s\n", e.name.c_str());
             continue;
         }
 
         fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, e.flags);
         mount_items.push_back(e.name);
     }
+    // ---------------------------
 
     options->Add<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
         App::PopToMenu();
@@ -1748,7 +1797,6 @@ void FsView::DisplayOptions() {
                     }
                 }
             );
-            log_write("pushed delete\n");
         });
     }
 
@@ -1773,8 +1821,9 @@ void FsView::DisplayOptions() {
                 entry->Depends(App::GetInstallEnable, i18n::get(App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
             }
         }
+    }
 
-        if (IsSd() && m_entries_current.size() && !m_selected_count) {
+    if (IsSd() && m_entries_current.size() && !m_selected_count) {
             if (GetEntry().IsFile() && (IsSamePath(GetEntry().GetExtension(), "nro") || !m_menu->FindFileAssocFor().empty())) {
                 auto entry = options->Add<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                     InstallForwarder();
