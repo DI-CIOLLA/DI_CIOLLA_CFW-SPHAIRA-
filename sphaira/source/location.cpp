@@ -94,15 +94,10 @@ auto GetStdio(bool write) -> StdioEntries {
 
         // --- Rename mounts for display ---
     for (auto &e : out) {
-
-        // microSD card → SD-CARD
-        if (e.name == "microSD card") {
-            e.name = "SD-CARD";
-        }
-
-        // umsX: → USB-DEVICE
         if (e.name.rfind("ums", 0) == 0) {
-            e.name = "USB-DEVICE";
+            const auto pos = e.name.find(':');
+            std::string info = (pos != std::string::npos) ? e.name.substr(pos) : "";
+            e.name = "USB-DEVICE" + info;
         }
     }
 
