@@ -41,41 +41,6 @@ auto GetStdio(bool write) -> StdioEntries {
         StdioEntries entries;
         if (R_SUCCEEDED(devoptab::GetNetworkDevices(entries))) {
             log_write("[LOCATION] got devoptab mounts: %zu\n", entries.size());
-
-            // ⭐ System-Partitionen ausblenden (Case-insensitive + enthält)
-            static const std::vector<std::string> hidden = {
-                "ALBUM",
-                "GAMES",
-                "PRODINFOF",
-                "SAFE",
-                "USER",
-                "SYSTEM"
-            };
-
-            // macht string klein
-            auto toLower = [](std::string s) {
-                std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-                return s;
-            };
-
-            entries.erase(
-                std::remove_if(entries.begin(), entries.end(),
-                    [&](const StdioEntry& e) {
-                        const std::string n = toLower(e.name);
-
-                        for (const auto& h : hidden) {
-                            const std::string h2 = toLower(h);
-
-                            // enthält HIDDEN?
-                            if (n.find(h2) != std::string::npos) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    }),
-                entries.end()
-            );
-
             add_from_entries(entries, out, write);
         }
     }
@@ -109,11 +74,11 @@ auto GetStdio(bool write) -> StdioEntries {
         }
 
         char display_name[0x100];
-        std::snprintf(display_name, sizeof(display_name), "%s (%s - %s - %zu GB)", 
-                      e.name, 
-                      LIBUSBHSFS_FS_TYPE_STR(e.fs_type), 
-                      e.product_name, 
-                      e.capacity / 1024 / 1024 / 1024);
+        std::snprintf(display_name, sizeof(display_name), "%s (%s - %s - %zu GB)",
+            e.name,
+            LIBUSBHSFS_FS_TYPE_STR(e.fs_type),
+            e.product_name,
+            e.capacity / 1024 / 1024 / 1024);
 
         u32 flags = 0;
         if (e.write_protect || (e.flags & UsbHsFsMountFlags_ReadOnly)) {
@@ -121,13 +86,45 @@ auto GetStdio(bool write) -> StdioEntries {
         }
 
         out.emplace_back(e.name, display_name, flags);
-        log_write("\t[USBHSFS] %s name: %s serial: %s man: %s\n", 
-                  e.name, 
-                  e.product_name, 
-                  e.serial_number, 
-                  e.manufacturer);
+        log_write("\t[USBHSFS] %s name: %s serial: %s man: %s\n",
+            e.name, e.product_name, e.serial_number, e.manufacturer);
     }
 #endif // ENABLE_LIBUSBHSFS
+
+
+    // ⭐⭐⭐ GLOBALER FILTER – VERSTECKT ALLE SYSTEM-PARTITIONEN ⭐⭐⭐
+    {
+        static const std::vector<std::string> hidden = {
+            "ALBUM",
+            "GAMES",
+            "PRODINFOF",
+            "SAFE",
+            "USER",
+            "SYSTEM"
+        };
+
+        auto toLower = [](std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+            return s;
+        };
+
+        out.erase(
+            std::remove_if(out.begin(), out.end(),
+                [&](const StdioEntry& e) {
+                    const std::string n = toLower(e.name);
+                    for (const auto& h : hidden) {
+                        const std::string h2 = toLower(h);
+                        if (n.find(h2) != std::string::npos) {
+                            return true; // löschen
+                        }
+                    }
+                    return false;
+                }),
+            out.end()
+        );
+    }
+    // ⭐⭐⭐ ENDE DES FILTERS ⭐⭐⭐
+
 
     return out;
 }
