@@ -1,34 +1,33 @@
 #include "location.hpp"
 #include "i18n.hpp"
 #include "log.hpp"
-#include "utils/devoptab.hpp"
 #include "fs.hpp"
 
 namespace sphaira::location {
 
-// ---------------------------------------------------------
-// Einträge von FS / Devoptab übernehmen + Umbenennungen
-// ---------------------------------------------------------
-static void add_from_entries(StdioEntries& entries, StdioEntries& out, bool write)
+static void add_from_fs(StdioEntries& out, bool write)
 {
+    StdioEntries entries;
+    FsStdio(entries);     // <-- einzig richtige Funktion aus deinem Projekt!
+
     for (auto& e : entries)
     {
         // --------------------
-        // BENENNUNGEN (ZIEL B)
+        // BENENNUNGEN (Variante B)
         // --------------------
 
-        if (e.name == "ums0") {
+        if (e.name == "ums0")
             e.name = "USB-DEVICE";
-        }
-        else if (e.name == "microSD card") {
+
+        else if (e.name == "microSD card")
             e.name = "SD-CARD";
-        }
-        else if (e.name == "games") {
+
+        else if (e.name == "games")
             e.name = "GAMES";
-        }
-        else if (e.name == "Album") {
+
+        else if (e.name == "Album")
             e.name = "ALBUM";
-        }
+
 
         // --------------------
         // READ ONLY HANDLING
@@ -40,37 +39,17 @@ static void add_from_entries(StdioEntries& entries, StdioEntries& out, bool writ
         }
 
         if (e.flags & FsEntryFlag::FsEntryFlag_ReadOnly)
-        {
             e.name += i18n::get(" (Read Only)");
-        }
 
         out.emplace_back(e);
     }
 }
 
-// ---------------------------------------------------------
-// Hauptfunktion: Stdio-Liste abrufen
-// ---------------------------------------------------------
 StdioEntries GetStdio(bool write)
 {
     StdioEntries out;
-
-    // Einträge aus devoptab / FS holen
-    {
-        StdioEntries entries;
-        devoptab::GetStdio(entries);
-        add_from_entries(entries, out, write);
-    }
-
-    // USB-Geräte, SD-Karte usw. aus fs.cpp holen
-    {
-        StdioEntries entries;
-        fs::ListStdio(entries);
-        add_from_entries(entries, out, write);
-    }
-
+    add_from_fs(out, write);  // <-- einzig benötigte Quelle
     return out;
 }
 
 } // namespace sphaira::location
-
