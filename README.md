@@ -23,8 +23,7 @@ Please include:
 
 ## FTP
 
-FTP can be enabled via the network menu. It uses the same config as ftpsrv `/config/ftpsrv/config.ini`. [See here for the full list
-of all configs available](https://github.com/ITotalJustice/ftpsrv/blob/master/assets/config.ini.template).
+FTP can be enabled via the network menu. It uses the same config as ftpsrv `/config/ftpsrv/config.ini`.
 
 ## MTP
 
@@ -46,8 +45,6 @@ See `assets/romfs/assoc/` for more examples of file assoc entries.
 ## Installing (applications)
 
 Sphaira can install applications (nsp, xci, nsz, xcz) from various sources (sd card, gamecard, ftp, usb).
-
-For informantion about the install options, [see the wiki](https://github.com/ITotalJustice/sphaira/wiki/Install).
 
 ### Usb (install)
 
