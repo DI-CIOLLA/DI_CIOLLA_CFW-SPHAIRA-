@@ -8,7 +8,7 @@ A homebrew menu for the Nintendo Switch.
 :-------------------------:|:-------------------------:
 ![Img](assets/icon.jpg) | ![Img](assets/screenshots/homebrew.jpg)
 ![Img](assets/screenshots/games.jpg) | ![Img](assets/screenshots/file_browser.jpg)
-![Img](assets/screenshots/file_browser.jpg) | ![Img](assets/screenshots/file_browser.jpg)
+![Img](assets/screenshots/usb-divice support.jpg) | ![Img](assets/screenshots/game_dump_install.jpg)
 ![Img](assets/screenshots/web.jpg) | ![Img](assets/icon.jpg)
 ## Bug reports
 
